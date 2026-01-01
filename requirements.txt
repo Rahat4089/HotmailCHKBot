@@ -4,3 +4,6 @@ aiohttp
 aiofiles
 flask
 gunicorn
+motor
+pymongo
+
