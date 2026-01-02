@@ -1276,14 +1276,14 @@ async def batch_worker(user_id: int, accounts: List[Tuple[str, str]], targets: L
         summary = (
             f"🎉 **BATCH PROCESSING COMPLETE!**\n\n"
             f"📈 **FINAL STATISTICS**\n"
-            f"┌─────────────────────────────┐\n"
+            f"┌───────────────────┐\n"
             f"│ • **Total Accounts**: {total_accounts}\n"
             f"│ • **Successfully Checked**: {successful}\n"
             f"│ • **Failed**: {total_accounts - successful}\n"
             f"│ • **Total Hits Found**: {total_hits}\n"
             f"│ • **Free Accounts**: {len(free_accounts)}\n"
             f"│ • **Threads Used**: 50 ⚡\n"
-            f"└─────────────────────────────┘\n\n"
+            f"└───────────────────┘\n\n"
         )
         
         if hit_files:
@@ -1509,7 +1509,7 @@ async def callback_handler(client, callback_query):
                     is_premium = False
                 
                 plan_text = f"🎫 **Your Subscription Plan**\n\n"
-                plan_text += f"┌─────────────────────────┐\n"
+                plan_text += f"┌───────────────┐\n"
                 plan_text += f"│ **Plan**: {subscription.get('plan_name', 'Free')}\n"
                 
                 if subscription.get('plan_id'):
@@ -1524,15 +1524,15 @@ async def callback_handler(client, callback_query):
                 plan_text += f"│ **Daily Limit**: {subscription.get('batch_limit', FREE_DAILY_BATCH_LIMIT)}\n"
                 plan_text += f"│ **Used Today**: {subscription.get('used_batch_today', 0)}\n"
                 plan_text += f"│ **Remaining**: {subscription.get('batch_limit', FREE_DAILY_BATCH_LIMIT) - subscription.get('used_batch_today', 0)}\n"
-                plan_text += f"└─────────────────────────┘\n\n"
+                plan_text += f"└───────────────┘\n\n"
                 
                 plan_text += f"📊 **Your Statistics**\n"
-                plan_text += f"┌─────────────────────────┐\n"
+                plan_text += f"┌───────────────┐\n"
                 plan_text += f"│ **Total Checks**: {stats.get('total_checks', 0)}\n"
                 plan_text += f"│ **Total Batches**: {stats.get('total_batches', 0)}\n"
                 plan_text += f"│ **Total Hits**: {stats.get('total_hits', 0)}\n"
                 plan_text += f"│ **Last Active**: {stats.get('last_active', 'Never').strftime('%Y-%m-%d %H:%M') if isinstance(stats.get('last_active'), datetime) else 'Never'}\n"
-                plan_text += f"└─────────────────────────┘\n\n"
+                plan_text += f"└───────────────┘\n\n"
                 
                 plan_text += f"{format_checked_by(user_id, username, full_name, is_premium)}\n"
                 
@@ -1635,7 +1635,7 @@ async def callback_handler(client, callback_query):
                 
                 status_text = (
                     f"📊 **Task Status**\n\n"
-                    f"┌─────────────────────┐\n"
+                    f"┌───────────┐\n"
                     f"│ • **Type**: {task['type'].upper()}\n"
                     f"│ • **Status**: {'✅ Running' if task.get('running', True) else '🛑 Stopped'}\n"
                     f"│ • **Duration**: {elapsed:.1f}s\n"
@@ -1646,7 +1646,7 @@ async def callback_handler(client, callback_query):
                     status_text += f"│ • **Targets**: {', '.join(task['data'].get('targets', []))}\n"
                     status_text += f"│ • **Threads**: 50 ⚡\n"
                 
-                status_text += f"└─────────────────────┘\n\n"
+                status_text += f"└───────────┘\n\n"
                 status_text += f"{get_animation_frame()} **Working...**\n\n"
                 status_text += f"{format_checked_by(user_id, username, full_name, is_premium)}\n"
                 status_text += f"👑 **Configured by:** {OWNER_USERNAME}"
@@ -2454,7 +2454,7 @@ async def userinfo_command(client, message: Message):
     stats = target_user.get("stats", {})
     
     info_text = f"👤 **User Information**\n\n"
-    info_text += f"┌─────────────────────────┐\n"
+    info_text += f"┌───────────────┐\n"
     info_text += f"│ **User ID**: {target_user.get('_id')}\n"
     info_text += f"│ **Plan**: {subscription.get('plan_name', 'Free')}\n"
     
@@ -2473,14 +2473,14 @@ async def userinfo_command(client, message: Message):
     info_text += f"│ **Used Today**: {subscription.get('used_batch_today', 0)}\n"
     info_text += f"│ **Join Date**: {target_user.get('join_date', 'N/A').strftime('%Y-%m-%d') if isinstance(target_user.get('join_date'), datetime) else 'N/A'}\n"
     info_text += f"│ **Last Active**: {stats.get('last_active', 'Never').strftime('%Y-%m-%d %H:%M') if isinstance(stats.get('last_active'), datetime) else 'Never'}\n"
-    info_text += f"└─────────────────────────┘\n\n"
+    info_text += f"└───────────────┘\n\n"
     
     info_text += f"📊 **Statistics**\n"
-    info_text += f"┌─────────────────────────┐\n"
+    info_text += f"┌───────────────┐\n"
     info_text += f"│ **Total Checks**: {stats.get('total_checks', 0)}\n"
     info_text += f"│ **Total Batches**: {stats.get('total_batches', 0)}\n"
     info_text += f"│ **Total Hits**: {stats.get('total_hits', 0)}\n"
-    info_text += f"└─────────────────────────┘\n\n"
+    info_text += f"└───────────────┘\n\n"
     
     info_text += f"{format_checked_by(target_id, target_username, target_full_name, target_is_premium)}\n"
     
@@ -2562,7 +2562,7 @@ async def myplan_command(client, message: Message):
             is_premium = False
         
         plan_text = f"🎫 **Your Subscription Plan**\n\n"
-        plan_text += f"┌─────────────────────────┐\n"
+        plan_text += f"┌───────────────┐\n"
         plan_text += f"│ **Plan**: {subscription.get('plan_name', 'Free')}\n"
         
         if subscription.get('plan_id'):
@@ -2580,15 +2580,15 @@ async def myplan_command(client, message: Message):
         plan_text += f"│ **Daily Limit**: {subscription.get('batch_limit', FREE_DAILY_BATCH_LIMIT)}\n"
         plan_text += f"│ **Used Today**: {subscription.get('used_batch_today', 0)}\n"
         plan_text += f"│ **Remaining**: {subscription.get('batch_limit', FREE_DAILY_BATCH_LIMIT) - subscription.get('used_batch_today', 0)}\n"
-        plan_text += f"└─────────────────────────┘\n\n"
+        plan_text += f"└───────────────┘\n\n"
         
         plan_text += f"📊 **Your Statistics**\n"
-        plan_text += f"┌─────────────────────────┐\n"
+        plan_text += f"┌────────────────┐\n"
         plan_text += f"│ **Total Checks**: {stats.get('total_checks', 0)}\n"
         plan_text += f"│ **Total Batches**: {stats.get('total_batches', 0)}\n"
         plan_text += f"│ **Total Hits**: {stats.get('total_hits', 0)}\n"
         plan_text += f"│ **Last Active**: {stats.get('last_active', 'Never').strftime('%Y-%m-%d %H:%M') if isinstance(stats.get('last_active'), datetime) else 'Never'}\n"
-        plan_text += f"└─────────────────────────┘\n\n"
+        plan_text += f"└────────────────┘\n\n"
         
         plan_text += f"{format_checked_by(user_id, username, full_name, is_premium)}\n"
         
@@ -2655,7 +2655,7 @@ async def status_command(client, message: Message):
         
         status_text = (
             f"📊 **Task Status**\n\n"
-            f"┌─────────────────────────┐\n"
+            f"┌────────────────┐\n"
             f"│ **Type**: {task['type'].upper()}\n"
             f"│ **Status**: {'✅ Running' if task.get('running', True) else '🛑 Stopped'}\n"
             f"│ **Duration**: {elapsed:.1f}s\n"
@@ -2666,7 +2666,7 @@ async def status_command(client, message: Message):
             status_text += f"│ **Targets**: {', '.join(task['data'].get('targets', []))}\n"
             status_text += f"│ **Threads**: 50 ⚡\n"
         
-        status_text += f"└─────────────────────────┘\n\n"
+        status_text += f"└───────────────┘\n\n"
         status_text += f"{get_animation_frame()} **Working...**\n\n"
         status_text += f"{format_checked_by(user_id, username, full_name, is_premium)}\n"
         status_text += f"👑 **Configured by:** {OWNER_USERNAME}"
